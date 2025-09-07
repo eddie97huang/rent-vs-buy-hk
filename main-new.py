@@ -15,9 +15,7 @@ Requires: numpy, numpy_financial
 
 from dataclasses import dataclass
 from typing import Dict, Any
-import numpy as np
 import numpy_financial as npf
-
 
 @dataclass
 class SimulationResult:
@@ -30,8 +28,9 @@ class SimulationResult:
 
 
 def simulate_rent_vs_buy(
-    house_price: float = 10_000_000,
-    monthly_rent: float = 30_000,
+    house_size_sqft: float = 500,
+    house_price_per_sqft: float = 20_000,
+    monthly_rent_per_sqft: float = 50,
     down_payment_pct: float = 0.30,   # 30%
     mortgage_rate_annual: float = 0.035,
     mortgage_years: int = 30,
@@ -40,8 +39,8 @@ def simulate_rent_vs_buy(
     rent_increase_annual: float = 0.02,
     gov_rate_pct_of_rent_annual: float = 0.05,   # 5% of market rent per year (approx for HK Rates)
     mgmt_fee_pct_of_value_annual: float = 0.0015, # 0.15% p.a. of property valuation
-    buy_closing_cost_pct: float = 0.04,  # EDIT: placeholder; HK stamp duties vary widely by buyer profile
-    sell_closing_cost_pct: float = 0.01, # agent + legal etc. (placeholder)
+    buy_closing_cost_pct: float = 0.05,  # HK stamp duties 4% + agent fee 1% + legal etc.
+    sell_closing_cost_pct: float = 0.01, # agent fee 1% + legal etc.
     horizon_years: int = 30,
     invest_monthly_diffs: bool = True,
 ) -> SimulationResult:
@@ -61,9 +60,11 @@ def simulate_rent_vs_buy(
     months = horizon_years * 12
 
     # Derived quantities and monthly factors
+    house_price = house_size_sqft * house_price_per_sqft
+    monthly_rent = house_size_sqft * monthly_rent_per_sqft
     down_payment = house_price * down_payment_pct
     loan_principal = house_price - down_payment
-    r_m = mortgage_rate_annual / 12.0
+    r_m = (1.0 + mortgage_rate_annual) ** (1.0 / 12.0) - 1.0
     n_m = mortgage_years * 12
 
     # Constant mortgage payment (negative sign from numpy_financial convention)
@@ -93,12 +94,7 @@ def simulate_rent_vs_buy(
     total_owner_cash_out = down_payment + buy_closing_cost
     total_renter_cash_out = 0.0
 
-    for m in range(1, months + 1):
-        # Update property value & market rent at start of month
-        if m > 1:
-            property_value *= f_house
-            market_rent *= f_rent
-
+    for m in range(0, months):
         # Owner costs this month
         interest = remaining_balance * r_m
         principal = mort_payment - interest
@@ -106,7 +102,7 @@ def simulate_rent_vs_buy(
         remaining_balance = max(remaining_balance - principal, 0.0)
 
         mgmt_fee = property_value * mgmt_fee_pct_of_value_annual / 12.0
-        gov_rates = market_rent * gov_rate_pct_of_rent_annual / 12.0
+        gov_rates = market_rent * gov_rate_pct_of_rent_annual
 
         owner_monthly_cost = mort_payment + mgmt_fee + gov_rates
 
@@ -122,16 +118,17 @@ def simulate_rent_vs_buy(
             if diff > 0:
                 # Renting is cheaper -> renter invests the savings relative to owning
                 renter_invest += diff
-                total_renter_cash_out += renter_monthly_cost
-                total_owner_cash_out += owner_monthly_cost
             else:
                 # Owning is cheaper -> owner invests the savings
                 owner_side_invest += (-diff)
-                total_renter_cash_out += renter_monthly_cost
-                total_owner_cash_out += owner_monthly_cost
-        else:
-            total_renter_cash_out += renter_monthly_cost
-            total_owner_cash_out += owner_monthly_cost
+
+        # Track totals (optional diagnostics)
+        total_renter_cash_out += renter_monthly_cost
+        total_owner_cash_out += owner_monthly_cost
+
+        # Update property value & market rent
+        property_value *= f_house
+        market_rent *= f_rent
 
     # End of horizon liquidation for owner
     sale_proceeds_before_costs = property_value
@@ -167,6 +164,7 @@ def simulate_rent_vs_buy(
         details=dict(
             remaining_mortgage_balance=remaining_balance,
             property_value_end=property_value,
+            monthly_rent_end=market_rent,
             sale_closing_cost=sell_closing_cost,
             owner_equity_realized=owner_equity_realized,
             owner_side_invest_end=owner_side_invest,
@@ -180,8 +178,9 @@ def simulate_rent_vs_buy(
 
 if __name__ == "__main__":
     res = simulate_rent_vs_buy(
-        house_price=10_000_000,
-        monthly_rent=30_000,
+        house_size_sqft=500,
+        house_price_per_sqft=20_000,
+        monthly_rent_per_sqft=50,
         down_payment_pct=0.20,
         mortgage_rate_annual=0.035,
         mortgage_years=30,
@@ -190,8 +189,8 @@ if __name__ == "__main__":
         rent_increase_annual=0.02,
         gov_rate_pct_of_rent_annual=0.05,
         mgmt_fee_pct_of_value_annual=0.0015,
-        buy_closing_cost_pct=0.04,   # <- EDIT to match your situation
-        sell_closing_cost_pct=0.01,  # <- EDIT to match your situation
+        buy_closing_cost_pct=0.05,
+        sell_closing_cost_pct=0.01,
         horizon_years=30,
         invest_monthly_diffs=True,
     )
