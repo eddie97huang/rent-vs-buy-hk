@@ -179,13 +179,13 @@ def simulate_rent_vs_buy(
 if __name__ == "__main__":
     res = simulate_rent_vs_buy(
         house_size_sqft=500,
-        house_price_per_sqft=20_000,
-        monthly_rent_per_sqft=50,
+        house_price_per_sqft=18_000,
+        monthly_rent_per_sqft=60,
         down_payment_pct=0.20,
         mortgage_rate_annual=0.035,
         mortgage_years=30,
         investment_return_annual=0.07,
-        house_appreciation_annual=0.01,
+        house_appreciation_annual=0.02,
         rent_increase_annual=0.02,
         gov_rate_pct_of_rent_annual=0.05,
         mgmt_fee_pct_of_value_annual=0.0015,
